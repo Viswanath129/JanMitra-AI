@@ -1,72 +1,315 @@
 **JanMitra AI — People's Voice. Intelligent Development.**
 
 View your app in AI Studio: https://ai.studio/apps/654791f8-4f91-456b-952f-7b8bb99ae915
+<div align="center">
 
-JanMitra AI is a next-generation AI-powered citizen engagement platform designed to transform how public infrastructure issues are reported, analyzed, and prioritized. Instead of functioning as a traditional grievance portal, JanMitra AI combines multilingual citizen feedback, AI analysis, geospatial intelligence, and offline-first mobile technology to generate actionable insights for evidence-based development planning.
+# 🇮🇳 JanMitra AI
 
-Citizens can report issues using voice, text, images, videos, documents, and live GPS location. The platform leverages AI to classify issues, generate summaries, detect duplicates, assign priorities, and organize reports into meaningful development intelligence.
+### People's Voice. Intelligent Development.
 
-Key Features
-Multilingual voice-first reporting
-AI-powered issue analysis using Gemini
-Google Maps & GPS integration
-Photo, video, and document attachments
-Offline-first architecture with automatic synchronization
-Secure authentication and user profiles
-Timeline-based issue tracking
-AI chatbot for citizen assistance
-Material Design 3 UI with Jetpack Compose
-Background synchronization using WorkManager
-RESTful backend powered by FastAPI
-PostgreSQL/PostGIS support for geospatial data
-Production-ready Clean Architecture (MVVM + Repository Pattern)
-Technology Stack
-Android
-Kotlin
-Jetpack Compose
-Material Design 3
-MVVM Architecture
-Room Database
-WorkManager
-CameraX
-Google Maps SDK
-Retrofit
-Moshi
-Coroutines
-StateFlow
-Backend
-FastAPI
-PostgreSQL
-PostGIS
-SQLAlchemy
-JWT Authentication
-Docker
-Nginx
-AI
-Google Gemini
-Structured JSON Responses
-Retrieval-Augmented Generation (RAG) Ready
-Intelligent Issue Classification
-Duplicate Detection
-AI Summarization
-Priority Recommendation
-Architecture
-Android Application
-        │
-        ▼
-REST API (FastAPI)
-        │
-        ├──────── AI Services (Gemini)
-        ├──────── PostgreSQL/PostGIS
-        ├──────── Media Storage
-        └──────── Notification Services
-Project Goals
+*An AI-powered citizen engagement and development intelligence platform enabling multilingual issue reporting, geospatial analysis, and data-driven public infrastructure planning.*
 
-JanMitra AI aims to provide:
+![Kotlin](https://img.shields.io/badge/Kotlin-2.0-blueviolet)
+![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-336791)
+![Gemini AI](https://img.shields.io/badge/Gemini-AI-4285F4)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-Better citizen participation
-Data-driven governance
-Transparent development planning
-Offline accessibility for rural users
-AI-assisted infrastructure prioritization
-Scalable and secure mobile-first architecture
+</div>
+
+---
+
+# 📌 Overview
+
+JanMitra AI is an AI-powered citizen participation platform that transforms how public infrastructure issues are reported, analyzed, and prioritized.
+
+Instead of functioning as a traditional grievance portal, JanMitra AI combines:
+
+- 🤖 Artificial Intelligence
+- 🌍 Geospatial Intelligence (GIS)
+- 🎤 Voice-first reporting
+- 📸 Multimedia evidence
+- 📍 GPS-based issue mapping
+- 📊 Data-driven development insights
+
+to help build smarter, more responsive communities.
+
+---
+
+# 🚀 Features
+
+## 📱 Citizen Reporting
+
+- Voice Reporting
+- Text Reporting
+- Photo Upload
+- Video Upload
+- GPS Location
+- Google Maps Integration
+- Offline Draft Saving
+- AI-generated Issue Summary
+- Timeline Tracking
+
+---
+
+## 🤖 AI Intelligence
+
+- Gemini AI Integration
+- Automatic Issue Classification
+- Multilingual Support
+- AI Summarization
+- Duplicate Detection
+- Priority Recommendation
+- Explainable AI Responses
+
+---
+
+## 📍 Maps & GIS
+
+- Google Maps SDK
+- Current GPS
+- Marker Selection
+- Reverse Geocoding
+- Village Identification
+- Address Resolution
+
+---
+
+## 📂 Media Support
+
+- CameraX
+- Gallery Picker
+- Video Upload
+- Image Compression
+- Media Preview
+
+---
+
+## 🔐 Authentication
+
+- Firebase Authentication
+- Google Sign-In
+- Phone Authentication
+- Anonymous Login
+
+---
+
+## ☁ Backend
+
+- FastAPI
+- REST APIs
+- PostgreSQL
+- PostGIS
+- JWT Authentication
+- Docker Deployment
+
+---
+
+## 📶 Offline First
+
+- Room Database
+- WorkManager Sync
+- Retry Queue
+- Automatic Synchronization
+
+---
+
+## 🔔 Notifications
+
+- Firebase Cloud Messaging
+- Status Updates
+- AI Analysis Complete
+- Report Progress Tracking
+
+---
+
+# 🏗 Architecture
+
+```text
+                ┌──────────────────────────────┐
+                │      Android Application     │
+                │                              │
+                │  Jetpack Compose + MVVM      │
+                └──────────────┬───────────────┘
+                               │
+                          HTTPS / REST
+                               │
+                ┌──────────────▼──────────────┐
+                │        FastAPI Backend      │
+                └───────┬───────────┬─────────┘
+                        │           │
+                  Gemini AI     PostgreSQL
+                        │           │
+                  AI Engine     PostGIS
+                        │
+                  Firebase Storage
+```
+
+---
+
+# 📱 Screens
+
+- Splash
+- Authentication
+- Home
+- Report Issue
+- Google Maps
+- AI Chat
+- Timeline
+- Notifications
+- Profile
+- Settings
+
+---
+
+# 🛠 Tech Stack
+
+## Android
+
+- Kotlin
+- Jetpack Compose
+- Material Design 3
+- MVVM
+- StateFlow
+- Room
+- Retrofit
+- Moshi
+- CameraX
+- Google Maps SDK
+- WorkManager
+
+---
+
+## Backend
+
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- PostGIS
+- JWT
+- Docker
+- Nginx
+
+---
+
+## AI
+
+- Google Gemini
+- Structured JSON
+- AI Summarization
+- Issue Classification
+- Duplicate Detection
+
+---
+
+## Cloud
+
+- Firebase Authentication
+- Firebase Storage
+- Firebase Cloud Messaging
+
+---
+
+# 📂 Project Structure
+
+```
+JanMitra-AI/
+│
+├── app/
+│   ├── data/
+│   ├── ui/
+│   ├── viewmodel/
+│   ├── repository/
+│   ├── network/
+│   └── worker/
+│
+├── server/
+│   ├── auth.py
+│   ├── ai_service.py
+│   ├── database.py
+│   ├── routes/
+│   └── main.py
+│
+├── docker/
+│
+├── docs/
+│
+└── README.md
+```
+
+---
+
+# 🔒 Security
+
+- JWT Authentication
+- Role-Based Access Control
+- HTTPS
+- Secure API Communication
+- Offline Data Protection
+- Permission Handling
+- Input Validation
+
+---
+
+# 🌍 Future Enhancements
+
+- Satellite Imagery Analysis
+- Computer Vision Road Detection
+- Predictive Infrastructure Planning
+- RAG Knowledge Base
+- WhatsApp Reporting
+- Multi-language Voice Assistant
+- Government API Integration
+
+---
+
+# 🚀 Getting Started
+
+Clone the repository
+
+```bash
+git clone https://github.com/yourusername/JanMitra-AI.git
+```
+
+Open the Android project
+
+```bash
+Android Studio
+```
+
+Run the backend
+
+```bash
+cd server
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+1. Fork the repository
+2. Create a new branch
+3. Commit your changes
+4. Push to your fork
+5. Open a Pull Request
+
+---
+
+# 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+<div align="center">
+
+## 🇮🇳 Built to empower citizens through AI-driven governance.
+
+**JanMitra AI — People's Voice. Intelligent Development.**
+
+</div>
