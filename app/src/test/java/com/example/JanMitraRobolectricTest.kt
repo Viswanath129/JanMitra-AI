@@ -20,18 +20,16 @@ import org.robolectric.annotation.Config
 class JanMitraRobolectricTest {
 
     private lateinit var fakeAiDataSource: FakeAiDataSource
-    private lateinit var fakeBackendApiService: FakeBackendApiService
     private lateinit var moshi: Moshi
     private lateinit var aiRepository: AiRepositoryImpl
 
     @Before
     fun setUp() {
         fakeAiDataSource = FakeAiDataSource()
-        fakeBackendApiService = FakeBackendApiService()
         moshi = Moshi.Builder()
             .addLast(KotlinJsonAdapterFactory())
             .build()
-        aiRepository = AiRepositoryImpl(fakeAiDataSource, fakeBackendApiService, moshi)
+        aiRepository = AiRepositoryImpl(fakeAiDataSource, moshi)
     }
 
     @Test
@@ -76,9 +74,9 @@ class JanMitraRobolectricTest {
         )
 
         assertNotNull(result)
-        assertEquals("English (Offline)", result.language)
+        assertEquals("English (Offline Fallback)", result.language)
         assertEquals("Medium", result.urgency)
-        assertEquals("Requirement of Water in Bhola Village. Summary processed locally on-device.", result.summary)
+        assertEquals("Local Heuristic: Requirement of Water in Bhola Village. Description: पानी की समस्या है. Summary processed locally on-device.", result.summary)
     }
 
     // --- Pure Kotlin Fakes for Testing ---
@@ -92,32 +90,6 @@ class JanMitraRobolectricTest {
                 throw RuntimeException("Network disconnected")
             }
             return resultText
-        }
-    }
-
-    class FakeBackendApiService : BackendApiService {
-        override suspend fun submitReport(report: NetworkReportCreate): Map<String, Any> {
-            return mapOf("status" to "success")
-        }
-
-        override suspend fun sendChatMessage(query: NetworkChatQuery): NetworkChatResponse {
-            return NetworkChatResponse("success", "RAG Response")
-        }
-
-        override suspend fun compareProjects(request: NetworkCompareRequest): NetworkCompareResponse {
-            return NetworkCompareResponse("success", "Comparison Response")
-        }
-
-        override suspend fun getAnalyticsDashboard(): NetworkAnalyticsResponse {
-            return NetworkAnalyticsResponse(0, emptyMap(), emptyMap(), emptyMap())
-        }
-
-        override suspend fun uploadMedia(
-            file: okhttp3.MultipartBody.Part,
-            mediaType: okhttp3.RequestBody,
-            reportId: okhttp3.RequestBody?
-        ): NetworkMediaResponse {
-            return NetworkMediaResponse("success", "http://test.url", "file.png")
         }
     }
 }

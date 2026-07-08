@@ -2,8 +2,10 @@ package com.example.data.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.compose.runtime.Immutable
 
 @Entity(tableName = "citizen_reports")
+@Immutable
 data class CitizenReport(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val issueId: String, // formatted like JM-2026-X84A
@@ -36,6 +38,7 @@ data class CitizenReport(
 )
 
 @Entity(tableName = "infrastructure_assets")
+@Immutable
 data class InfrastructureAsset(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
@@ -49,6 +52,7 @@ data class InfrastructureAsset(
 )
 
 @Entity(tableName = "village_statistics")
+@Immutable
 data class VillageStatistics(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val villageName: String,
@@ -65,9 +69,11 @@ data class VillageStatistics(
 )
 
 @Entity(tableName = "ai_chat_messages")
+@Immutable
 data class AiChatMessage(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val sender: String, // "User" or "JanMitra AI"
     val text: String,
     val timestamp: Long = System.currentTimeMillis()
 )
+

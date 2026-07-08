@@ -346,6 +346,7 @@ fun StatusBadge(
     modifier: Modifier = Modifier
 ) {
     val (color, text) = when (status) {
+        "PendingSubmission" -> WarningOrange to "Pending Sync"
         "Reported" -> DividerGray to "Reported"
         "Analyzed" -> SecondaryTeal to "AI Analyzed"
         "Approved" -> PrimaryBlue to "Approved"
@@ -381,13 +382,13 @@ fun DashboardStatCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

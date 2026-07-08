@@ -133,7 +133,7 @@ fun LoginScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF1F5F9), RoundedCornerShape(16.dp))
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
@@ -236,7 +236,7 @@ fun LoginScreen(
                                         label = { Text("Email Address") },
                                         leadingIcon = { Icon(Icons.Rounded.Email, contentDescription = "Email") },
                                         singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("email_input")
@@ -257,7 +257,7 @@ fun LoginScreen(
                                         },
                                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                         singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("password_input")
@@ -265,12 +265,12 @@ fun LoginScreen(
 
                                     Button(
                                         onClick = { viewModel.loginWithEmailPassword(email, password) },
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                                         enabled = !viewModel.isAuthenticating,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(50.dp)
+                                            .height(56.dp)
                                             .testTag("login_button")
                                     ) {
                                         if (viewModel.isAuthenticating) {
@@ -304,7 +304,7 @@ fun LoginScreen(
                                         label = { Text("Full Name") },
                                         leadingIcon = { Icon(Icons.Rounded.Person, contentDescription = "Name") },
                                         singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("register_name_input")
@@ -316,7 +316,7 @@ fun LoginScreen(
                                         label = { Text("Email Address") },
                                         leadingIcon = { Icon(Icons.Rounded.Email, contentDescription = "Email") },
                                         singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("register_email_input")
@@ -329,7 +329,7 @@ fun LoginScreen(
                                         leadingIcon = { Icon(Icons.Rounded.Lock, contentDescription = "Lock") },
                                         visualTransformation = PasswordVisualTransformation(),
                                         singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("register_password_input")
@@ -337,12 +337,12 @@ fun LoginScreen(
 
                                     Button(
                                         onClick = { viewModel.registerWithEmailPassword(email, password, name) },
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                                         enabled = !viewModel.isAuthenticating,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(50.dp)
+                                            .height(56.dp)
                                             .testTag("register_button")
                                     ) {
                                         if (viewModel.isAuthenticating) {
@@ -376,7 +376,7 @@ fun LoginScreen(
                                         label = { Text("Phone Number (+91...)") },
                                         leadingIcon = { Icon(Icons.Rounded.Phone, contentDescription = "Phone") },
                                         singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("phone_input")
@@ -389,7 +389,7 @@ fun LoginScreen(
                                             label = { Text("Enter 6-Digit OTP") },
                                             leadingIcon = { Icon(Icons.Rounded.Pin, contentDescription = "Pin") },
                                             singleLine = true,
-                                            shape = RoundedCornerShape(12.dp),
+                                            shape = RoundedCornerShape(16.dp),
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .testTag("otp_input")
@@ -397,12 +397,12 @@ fun LoginScreen(
 
                                         Button(
                                             onClick = { viewModel.verifyPhoneOtp(otpCode) },
-                                            shape = RoundedCornerShape(12.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
                                             enabled = !viewModel.isAuthenticating,
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(50.dp)
+                                                .height(56.dp)
                                                 .testTag("verify_otp_button")
                                         ) {
                                             if (viewModel.isAuthenticating) {
@@ -414,12 +414,12 @@ fun LoginScreen(
                                     } else {
                                         Button(
                                             onClick = { viewModel.sendPhoneOtp(phoneNumber, activity) },
-                                            shape = RoundedCornerShape(12.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                                             enabled = !viewModel.isAuthenticating,
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(50.dp)
+                                                .height(56.dp)
                                                 .testTag("send_otp_button")
                                         ) {
                                             if (viewModel.isAuthenticating) {
@@ -443,11 +443,11 @@ fun LoginScreen(
                     // GOOGLE SIGN IN BUTTON
                     OutlinedButton(
                         onClick = { viewModel.signInWithGoogle("mock_google_id_token") },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(16.dp),
                         border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp)
+                            .height(56.dp)
                             .testTag("google_login_button")
                     ) {
                         Row(

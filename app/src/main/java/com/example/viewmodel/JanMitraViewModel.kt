@@ -15,12 +15,8 @@ import com.example.data.entity.*
 import com.example.data.repository.AiRepository
 import com.example.data.repository.JanMitraRepository
 import com.example.data.network.SessionManager
-import com.example.data.network.NetworkModule
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.UserProfileChangeRequest
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 class JanMitraViewModel(
     application: Application,
@@ -44,21 +40,13 @@ class JanMitraViewModel(
     // --- Authentication States ---
     private val sessionManager = SessionManager.getInstance(application)
     
-    private val firebaseAuth: FirebaseAuth? by lazy {
-        try {
-            FirebaseAuth.getInstance()
-        } catch (e: Exception) {
-            Log.e("JanMitraViewModel", "Firebase Auth initialization failed: ${e.message}")
-            null
-        }
-    }
-    
-    var isUserLoggedIn by mutableStateOf(sessionManager.isLoggedIn)
-    var currentUserEmail by mutableStateOf(sessionManager.userEmail ?: "")
-    var currentUserDisplayName by mutableStateOf(sessionManager.userName ?: "")
-    var currentUserPhone by mutableStateOf(sessionManager.userPhone ?: "")
-    var currentUserRole by mutableStateOf(sessionManager.userRole ?: "citizen")
+    var isUserLoggedIn by mutableStateOf(false)
+    var currentUserEmail by mutableStateOf("")
+    var currentUserDisplayName by mutableStateOf("")
+    var currentUserPhone by mutableStateOf("")
+    var currentUserRole by mutableStateOf("citizen")
     var currentTrackIdFromDeepLink by mutableStateOf<String?>(null)
+    var editingDraftId by mutableStateOf<Int?>(null)
     
     var isAuthenticating by mutableStateOf(false)
     var authErrorMessage by mutableStateOf<String?>(null)
@@ -83,23 +71,14 @@ class JanMitraViewModel(
     private fun restoreSession() {
         viewModelScope.launch {
             try {
-                val firebaseUser = firebaseAuth?.currentUser
-                if (firebaseUser != null && sessionManager.isLoggedIn) {
-                    currentUserEmail = firebaseUser.email ?: "anonymous_${firebaseUser.uid}@janmitra.ai"
-                    currentUserDisplayName = firebaseUser.displayName ?: "Firebase User"
-                    currentUserPhone = firebaseUser.phoneNumber ?: ""
+                val isLoggedIn = sessionManager.isLoggedInFlow.first()
+                userLanguage = sessionManager.userLanguageFlow.first()
+                if (isLoggedIn) {
+                    currentUserEmail = sessionManager.userEmailFlow.first() ?: ""
+                    currentUserDisplayName = sessionManager.userNameFlow.first() ?: ""
+                    currentUserPhone = sessionManager.userPhoneFlow.first() ?: ""
+                    currentUserRole = sessionManager.userRoleFlow.first() ?: "citizen"
                     isUserLoggedIn = true
-                    
-                    try {
-                        val result = firebaseUser.getIdToken(true).await()
-                        result.token?.let { idToken ->
-                            exchangeTokenWithBackend(idToken)
-                        }
-                    } catch (e: Exception) {
-                        Log.e("JanMitraViewModel", "Failed to refresh Firebase token, using stored backend token: ${e.message}")
-                    }
-                } else if (sessionManager.isLoggedIn && sessionManager.refreshToken != null) {
-                    refreshBackendSession()
                 } else {
                     isUserLoggedIn = false
                 }
@@ -109,94 +88,33 @@ class JanMitraViewModel(
         }
     }
 
-    private suspend fun exchangeTokenWithBackend(idToken: String) {
-        try {
-            val response = NetworkModule.backendApiService.exchangeFirebaseToken(
-                com.example.data.network.NetworkFirebaseExchangeRequest(idToken, currentUserRole)
-            )
-            sessionManager.accessToken = response.accessToken
-            sessionManager.refreshToken = response.refreshToken
-            sessionManager.userEmail = currentUserEmail
-            sessionManager.userName = response.fullName
-            sessionManager.userRole = response.role
-            sessionManager.isLoggedIn = true
-            
-            currentUserDisplayName = response.fullName
-            currentUserRole = response.role
-            isUserLoggedIn = true
-            authErrorMessage = null
-        } catch (e: Exception) {
-            Log.e("JanMitraViewModel", "Backend exchange failed: ${e.message}")
-            authErrorMessage = "Backend sync failed: ${e.message}. Offline access active."
-        }
-    }
-
-    private suspend fun refreshBackendSession() {
-        val refreshToken = sessionManager.refreshToken ?: return
-        try {
-            val response = NetworkModule.backendApiService.refreshBackendToken(
-                com.example.data.network.NetworkRefreshTokenRequest(refreshToken)
-            )
-            sessionManager.accessToken = response.accessToken
-            sessionManager.refreshToken = response.refreshToken
-            sessionManager.userName = response.fullName
-            sessionManager.userRole = response.role
-            sessionManager.isLoggedIn = true
-            
-            currentUserDisplayName = response.fullName
-            currentUserRole = response.role
-            isUserLoggedIn = true
-            authErrorMessage = null
-        } catch (e: Exception) {
-            Log.e("JanMitraViewModel", "Backend token refresh failed: ${e.message}")
-        }
-    }
-
     fun signInAnonymously() {
         viewModelScope.launch {
             isAuthenticating = true
             authErrorMessage = null
             try {
-                val auth = firebaseAuth
-                if (auth != null) {
-                    val result = auth.signInAnonymously().await()
-                    val user = result.user
-                    if (user != null) {
-                        currentUserEmail = "anonymous_${user.uid}@janmitra.ai"
-                        currentUserDisplayName = "Guest Advocate"
-                        currentUserPhone = ""
-                        currentUserRole = "citizen"
-                        val idTokenResult = user.getIdToken(true).await()
-                        idTokenResult.token?.let { idToken ->
-                            exchangeTokenWithBackend(idToken)
-                        }
-                    } else {
-                        throw Exception("Anonymous user is null")
-                    }
-                } else {
-                    loginOfflineGuest()
-                }
+                loginOfflineGuest()
             } catch (e: Exception) {
                 Log.e("JanMitraViewModel", "Anonymous sign-in failed: ${e.message}")
                 authErrorMessage = e.message ?: "Anonymous sign-in failed"
-                loginOfflineGuest()
             } finally {
                 isAuthenticating = false
             }
         }
     }
 
-    private fun loginOfflineGuest() {
-        val guestUid = java.util.UUID.randomUUID().toString()
-        currentUserEmail = "anonymous_$guestUid@janmitra.ai"
-        currentUserDisplayName = "Guest Advocate (Local)"
+    private suspend fun loginOfflineGuest() {
+        val guestUid = java.util.UUID.randomUUID().toString().take(6)
+        currentUserEmail = "guest_$guestUid@janmitra.ai"
+        currentUserDisplayName = "Guest Advocate"
         currentUserPhone = ""
         currentUserRole = "citizen"
         isUserLoggedIn = true
-        sessionManager.isLoggedIn = true
-        sessionManager.userEmail = currentUserEmail
-        sessionManager.userName = currentUserDisplayName
-        sessionManager.userRole = currentUserRole
+        sessionManager.setIsLoggedIn(true)
+        sessionManager.setUserEmail(currentUserEmail)
+        sessionManager.setUserName(currentUserDisplayName)
+        sessionManager.setUserPhone(currentUserPhone)
+        sessionManager.setUserRole(currentUserRole)
     }
 
     fun loginWithEmailPassword(email: String, password: String) {
@@ -204,39 +122,20 @@ class JanMitraViewModel(
             isAuthenticating = true
             authErrorMessage = null
             try {
-                val auth = firebaseAuth
-                if (auth != null) {
-                    val result = auth.signInWithEmailAndPassword(email, password).await()
-                    val user = result.user
-                    if (user != null) {
-                        currentUserEmail = user.email ?: email
-                        currentUserDisplayName = user.displayName ?: email.split("@")[0]
-                        currentUserPhone = user.phoneNumber ?: ""
-                        val idTokenResult = user.getIdToken(true).await()
-                        idTokenResult.token?.let { idToken ->
-                            exchangeTokenWithBackend(idToken)
-                        }
-                    } else {
-                        throw Exception("User is null")
-                    }
-                } else {
-                    val response = NetworkModule.backendApiService.exchangeFirebaseToken(
-                        com.example.data.network.NetworkFirebaseExchangeRequest(
-                            idToken = "mock_token_for_${email}",
-                            role = "citizen"
-                        )
-                    )
-                    currentUserEmail = email
-                    currentUserDisplayName = response.fullName
-                    currentUserRole = response.role
-                    isUserLoggedIn = true
-                    sessionManager.accessToken = response.accessToken
-                    sessionManager.refreshToken = response.refreshToken
-                    sessionManager.userEmail = email
-                    sessionManager.userName = response.fullName
-                    sessionManager.userRole = response.role
-                    sessionManager.isLoggedIn = true
+                currentUserEmail = email
+                currentUserDisplayName = email.substringBefore("@").replaceFirstChar { it.uppercase() }
+                currentUserPhone = ""
+                currentUserRole = when {
+                    email.contains("admin", ignoreCase = true) -> "admin"
+                    email.contains("officer", ignoreCase = true) || email.contains("mp", ignoreCase = true) -> "officer"
+                    else -> "citizen"
                 }
+                isUserLoggedIn = true
+                sessionManager.setIsLoggedIn(true)
+                sessionManager.setUserEmail(currentUserEmail)
+                sessionManager.setUserName(currentUserDisplayName)
+                sessionManager.setUserPhone(currentUserPhone)
+                sessionManager.setUserRole(currentUserRole)
             } catch (e: Exception) {
                 Log.e("JanMitraViewModel", "Login failed: ${e.message}")
                 authErrorMessage = e.message ?: "Authentication failed"
@@ -251,41 +150,16 @@ class JanMitraViewModel(
             isAuthenticating = true
             authErrorMessage = null
             try {
-                val auth = firebaseAuth
-                if (auth != null) {
-                    val result = auth.createUserWithEmailAndPassword(email, password).await()
-                    val user = result.user
-                    if (user != null) {
-                        val profileUpdates = UserProfileChangeRequest.Builder()
-                            .setDisplayName(fullName)
-                            .build()
-                        user.updateProfile(profileUpdates).await()
-                        
-                        currentUserEmail = email
-                        currentUserDisplayName = fullName
-                        val tokenResult = user.getIdToken(true).await()
-                        tokenResult.token?.let { idToken ->
-                            exchangeTokenWithBackend(idToken)
-                        }
-                    }
-                } else {
-                    val response = NetworkModule.backendApiService.exchangeFirebaseToken(
-                        com.example.data.network.NetworkFirebaseExchangeRequest(
-                            idToken = "mock_token_for_${email}",
-                            role = "citizen"
-                        )
-                    )
-                    currentUserEmail = email
-                    currentUserDisplayName = fullName
-                    currentUserRole = response.role
-                    isUserLoggedIn = true
-                    sessionManager.accessToken = response.accessToken
-                    sessionManager.refreshToken = response.refreshToken
-                    sessionManager.userEmail = email
-                    sessionManager.userName = fullName
-                    sessionManager.userRole = response.role
-                    sessionManager.isLoggedIn = true
-                }
+                currentUserEmail = email
+                currentUserDisplayName = fullName
+                currentUserPhone = ""
+                currentUserRole = "citizen"
+                isUserLoggedIn = true
+                sessionManager.setIsLoggedIn(true)
+                sessionManager.setUserEmail(email)
+                sessionManager.setUserName(fullName)
+                sessionManager.setUserPhone(currentUserPhone)
+                sessionManager.setUserRole(currentUserRole)
             } catch (e: Exception) {
                 Log.e("JanMitraViewModel", "Registration failed: ${e.message}")
                 authErrorMessage = e.message ?: "Registration failed"
@@ -300,49 +174,9 @@ class JanMitraViewModel(
             isAuthenticating = true
             authErrorMessage = null
             try {
-                val auth = firebaseAuth
-                if (auth != null) {
-                    val options = com.google.firebase.auth.PhoneAuthOptions.newBuilder(auth)
-                        .setPhoneNumber(phoneNumber)
-                        .setTimeout(60L, java.util.concurrent.TimeUnit.SECONDS)
-                        .setActivity(activity)
-                        .setCallbacks(object : com.google.firebase.auth.PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                            override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
-                                viewModelScope.launch {
-                                    try {
-                                        val result = auth.signInWithCredential(credential).await()
-                                        val user = result.user
-                                        if (user != null) {
-                                            currentUserPhone = phoneNumber
-                                            currentUserEmail = user.email ?: "phone_${user.uid}@janmitra.ai"
-                                            currentUserDisplayName = "Phone Advocate"
-                                            val tokenResult = user.getIdToken(true).await()
-                                            tokenResult.token?.let { exchangeTokenWithBackend(it) }
-                                        }
-                                    } catch (e: Exception) {
-                                        authErrorMessage = e.message
-                                    }
-                                }
-                            }
-
-                            override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
-                                authErrorMessage = e.message
-                                isOtpSent = false
-                            }
-
-                            override fun onCodeSent(verificationId: String, token: com.google.firebase.auth.PhoneAuthProvider.ForceResendingToken) {
-                                verificationIdToken = verificationId
-                                isOtpSent = true
-                                otpSentMessage = "OTP sent successfully to $phoneNumber"
-                            }
-                        })
-                        .build()
-                    com.google.firebase.auth.PhoneAuthProvider.verifyPhoneNumber(options)
-                } else {
-                    verificationIdToken = "mock_verification_id"
-                    isOtpSent = true
-                    otpSentMessage = "Demo OTP (use 123456) sent to $phoneNumber"
-                }
+                verificationIdToken = "mock_verification_id"
+                isOtpSent = true
+                otpSentMessage = "Demo OTP (use 123456) sent to $phoneNumber"
             } catch (e: Exception) {
                 authErrorMessage = e.message ?: "Failed to verify phone"
             } finally {
@@ -356,31 +190,19 @@ class JanMitraViewModel(
             isAuthenticating = true
             authErrorMessage = null
             try {
-                val auth = firebaseAuth
-                if (auth != null && verificationIdToken != "mock_verification_id") {
-                    val credential = com.google.firebase.auth.PhoneAuthProvider.getCredential(verificationIdToken, code)
-                    val result = auth.signInWithCredential(credential).await()
-                    val user = result.user
-                    if (user != null) {
-                        currentUserPhone = user.phoneNumber ?: ""
-                        currentUserEmail = user.email ?: "phone_${user.uid}@janmitra.ai"
-                        currentUserDisplayName = "Phone Advocate"
-                        val tokenResult = user.getIdToken(true).await()
-                        tokenResult.token?.let { exchangeTokenWithBackend(it) }
-                    }
+                if (code == "123456") {
+                    currentUserPhone = "+91 98765 43210"
+                    currentUserEmail = "phone_demo@janmitra.ai"
+                    currentUserDisplayName = "Phone Advocate (Demo)"
+                    currentUserRole = "citizen"
+                    isUserLoggedIn = true
+                    sessionManager.setIsLoggedIn(true)
+                    sessionManager.setUserEmail(currentUserEmail)
+                    sessionManager.setUserName(currentUserDisplayName)
+                    sessionManager.setUserPhone(currentUserPhone)
+                    sessionManager.setUserRole(currentUserRole)
                 } else {
-                    if (code == "123456" || verificationIdToken == "mock_verification_id") {
-                        currentUserPhone = "+91 98765 43210"
-                        currentUserEmail = "phone_demo@janmitra.ai"
-                        currentUserDisplayName = "Phone Advocate (Demo)"
-                        isUserLoggedIn = true
-                        sessionManager.isLoggedIn = true
-                        sessionManager.userEmail = currentUserEmail
-                        sessionManager.userName = currentUserDisplayName
-                        sessionManager.userPhone = currentUserPhone
-                    } else {
-                        throw Exception("Invalid OTP verification code")
-                    }
+                    throw Exception("Invalid OTP verification code. Please use 123456.")
                 }
             } catch (e: Exception) {
                 authErrorMessage = e.message ?: "Verification failed"
@@ -395,27 +217,14 @@ class JanMitraViewModel(
             isAuthenticating = true
             authErrorMessage = null
             try {
-                val auth = firebaseAuth
-                if (auth != null) {
-                    val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
-                    val result = auth.signInWithCredential(credential).await()
-                    val user = result.user
-                    if (user != null) {
-                        currentUserEmail = user.email ?: ""
-                        currentUserDisplayName = user.displayName ?: ""
-                        val tokenResult = user.getIdToken(true).await()
-                        tokenResult.token?.let { exchangeTokenWithBackend(it) }
-                    }
-                } else {
-                    currentUserEmail = "google_demo@gmail.com"
-                    currentUserDisplayName = "Kasi Viswanath"
-                    currentUserRole = "citizen"
-                    isUserLoggedIn = true
-                    sessionManager.isLoggedIn = true
-                    sessionManager.userEmail = currentUserEmail
-                    sessionManager.userName = currentUserDisplayName
-                    sessionManager.userRole = currentUserRole
-                }
+                currentUserEmail = "google_demo@gmail.com"
+                currentUserDisplayName = "Kasi Viswanath"
+                currentUserRole = "citizen"
+                isUserLoggedIn = true
+                sessionManager.setIsLoggedIn(true)
+                sessionManager.setUserEmail(currentUserEmail)
+                sessionManager.setUserName(currentUserDisplayName)
+                sessionManager.setUserRole(currentUserRole)
             } catch (e: Exception) {
                 authErrorMessage = e.message ?: "Google Sign-In failed"
             } finally {
@@ -426,11 +235,6 @@ class JanMitraViewModel(
 
     fun logout() {
         viewModelScope.launch {
-            try {
-                firebaseAuth?.signOut()
-            } catch (e: Exception) {
-                Log.e("JanMitraViewModel", "Firebase sign out failed: ${e.message}")
-            }
             sessionManager.clear()
             isUserLoggedIn = false
             currentUserEmail = ""
@@ -443,8 +247,29 @@ class JanMitraViewModel(
         }
     }
 
+    fun deleteReport(id: Int) {
+        viewModelScope.launch {
+            repository.deleteReport(id)
+        }
+    }
+
+    fun updateReport(report: CitizenReport) {
+        viewModelScope.launch {
+            repository.updateReport(report)
+        }
+    }
+
     // --- Citizen Submission Form State ---
-    var reportCategory by mutableStateOf("Water")
+    var userLanguage by mutableStateOf("English")
+
+    fun updateUserLanguage(lang: String) {
+        userLanguage = lang
+        viewModelScope.launch {
+            sessionManager.setUserLanguage(lang)
+        }
+    }
+
+    var reportCategory by mutableStateOf("")
     var reportDescription by mutableStateOf("")
     var reportVillageName by mutableStateOf("Bhola Village")
     var reportUrgency by mutableStateOf("Medium")
@@ -470,7 +295,7 @@ class JanMitraViewModel(
     var submittedReportId by mutableStateOf<String?>(null)
 
     fun resetForm() {
-        reportCategory = "Water"
+        reportCategory = ""
         reportDescription = ""
         reportVillageName = "Bhola Village"
         reportUrgency = "Medium"
@@ -485,6 +310,7 @@ class JanMitraViewModel(
         reportLongitude = 77.2090
         attachedImageUri = null
         attachedVideoUri = null
+        editingDraftId = null
     }
 
     fun saveFormDraft() {
@@ -499,6 +325,7 @@ class JanMitraViewModel(
                 hasVoice = isVoiceRecorded,
                 villageStats = stats
             ).copy(
+                id = editingDraftId ?: 0,
                 detectedLanguage = detectedLanguage,
                 aiSummary = "DRAFT: " + reportDescription,
                 locationLatitude = reportLatitude,
@@ -507,8 +334,10 @@ class JanMitraViewModel(
                 voiceFilePath = attachedVideoUri,
                 status = "Draft"
             )
-            repository.insertReport(report)
-            triggerSync()
+            val newId = repository.insertReport(report)
+            if (editingDraftId == null) {
+                editingDraftId = newId.toInt()
+            }
             resetForm()
         }
     }
@@ -524,9 +353,64 @@ class JanMitraViewModel(
         isPhotoAttached = report.imageUri != null
         isVoiceRecorded = report.voiceFilePath != null
         activeFormStep = 2 // Go directly to details
-        
-        viewModelScope.launch {
-            repository.deleteReport(report.id)
+        editingDraftId = report.id
+    }
+
+    suspend fun copyUriToLocal(context: android.content.Context, uri: android.net.Uri, prefix: String): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        return@withContext try {
+            val contentResolver = context.contentResolver
+            val type = contentResolver.getType(uri)
+            
+            // 1. Format validation: Only allow images, videos, and audio
+            if (type != null && !type.contains("image") && !type.contains("video") && !type.contains("audio")) {
+                Log.e("JanMitraViewModel", "Unsupported format: $type")
+                null
+            } else {
+                // 2. Pre-copy size validation using OpenableColumns
+                var size = -1L
+                try {
+                    contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                            if (sizeIndex != -1) {
+                                size = cursor.getLong(sizeIndex)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("JanMitraViewModel", "Could not query size beforehand: ${e.message}")
+                }
+
+                if (size > 10 * 1024 * 1024) {
+                    Log.e("JanMitraViewModel", "File exceeds 10MB limit (pre-checked): $size bytes")
+                    null
+                } else {
+                    val ext = when {
+                        type?.contains("video") == true -> "mp4"
+                        type?.contains("audio") == true -> "3gp"
+                        else -> "jpg"
+                    }
+                    val fileName = "${prefix}_${System.currentTimeMillis()}.$ext"
+                    val localFile = java.io.File(context.filesDir, fileName)
+                    contentResolver.openInputStream(uri)?.use { inputStream ->
+                        java.io.FileOutputStream(localFile).use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+
+                    // Fallback post-copy check
+                    if (localFile.length() > 10 * 1024 * 1024) {
+                        Log.e("JanMitraViewModel", "File exceeds 10MB limit (post-checked): ${localFile.length()} bytes")
+                        localFile.delete()
+                        null
+                    } else {
+                        localFile.absolutePath
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("JanMitraViewModel", "Error copying URI to local file: ${e.message}")
+            null
         }
     }
 
@@ -588,18 +472,20 @@ class JanMitraViewModel(
                 hasVoice = isVoiceRecorded || attachedVideoUri != null,
                 villageStats = stats
             ).copy(
+                id = editingDraftId ?: 0,
                 detectedLanguage = detectedLanguage,
                 aiSummary = aiAnalysisSummary,
                 locationLatitude = reportLatitude,
                 locationLongitude = reportLongitude,
                 imageUri = attachedImageUri,
                 voiceFilePath = attachedVideoUri,
-                status = "Reported"
+                status = "PendingSubmission"
             )
             repository.insertReport(report)
             triggerSync()
             submittedReportId = report.issueId
             activeFormStep = 4
+            editingDraftId = null
         }
     }
 

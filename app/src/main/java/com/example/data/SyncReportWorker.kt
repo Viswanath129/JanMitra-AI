@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.data.network.NetworkModule
-import com.example.data.network.NetworkReportCreate
 import kotlinx.coroutines.flow.firstOrNull
 
 class SyncReportWorker(
@@ -14,55 +13,64 @@ class SyncReportWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        Log.d("SyncReportWorker", "Background offline report sync started...")
+        Log.d("SyncReportWorker", "Background offline report processing started...")
         val database = AppDatabase.getDatabase(applicationContext)
         val reportDao = database.citizenReportDao()
         
         val reports = reportDao.getAllReports().firstOrNull()
         if (reports.isNullOrEmpty()) {
-            Log.d("SyncReportWorker", "No reports found in local cache to sync.")
+            Log.d("SyncReportWorker", "No reports found in local cache to process.")
             return Result.success()
         }
 
-        var anyFailure = false
-        val apiService = NetworkModule.backendApiService
+        val aiRepository = NetworkModule.aiRepository
+        var hasFailure = false
+        var hasRecoverableFailure = false
 
-        for (report in reports) {
-            // Let's only attempt to sync local drafts or newly reported citizen reports
-            if (report.status == "Reported" || report.status == "Draft") {
+        for (rawReport in reports) {
+            val report = com.example.data.repository.JanMitraRepository.decryptReport(rawReport)
+            if (report.status == "PendingSubmission") {
                 try {
-                    val networkReport = NetworkReportCreate(
-                        issueId = report.issueId,
+                    // Perform background AI Analysis for the submitted report
+                    val result = aiRepository.analyzeReport(
                         category = report.category,
                         description = report.description,
-                        voiceFilePath = report.voiceFilePath,
-                        imageUri = report.imageUri,
-                        locationLatitude = report.locationLatitude,
-                        locationLongitude = report.locationLongitude,
-                        locationName = report.locationName,
-                        urgency = report.urgency,
-                        timestamp = report.timestamp,
-                        priorityScore = report.priorityScore,
-                        aiSummary = report.aiSummary,
-                        evidenceStrength = report.evidenceStrength,
-                        citizenSentiment = report.citizenSentiment,
-                        explanationText = report.explanationText
+                        villageName = report.locationName,
+                        isVoiceRecorded = !report.voiceFilePath.isNullOrEmpty(),
+                        isPhotoAttached = !report.imageUri.isNullOrEmpty()
                     )
                     
-                    val response = apiService.submitReport(networkReport)
-                    Log.d("SyncReportWorker", "Successfully synced report ${report.issueId}: $response")
-                    
-                    // Mark as synchronized locally by updating its status to "Synced" or keep current status
-                    if (report.status == "Draft") {
-                        reportDao.updateReport(report.copy(status = "Reported"))
-                    }
+                    val updatedReport = report.copy(
+                        status = "Reported",
+                        urgency = result.urgency,
+                        aiSummary = result.summary
+                    )
+                    val encryptedReport = com.example.data.repository.JanMitraRepository.encryptReport(updatedReport)
+                    reportDao.updateReport(encryptedReport)
+                    Log.d("SyncReportWorker", "Successfully processed pending report ${report.issueId} in background")
                 } catch (e: Exception) {
-                    Log.e("SyncReportWorker", "Failed to sync report ${report.issueId}: ${e.message}")
-                    anyFailure = true
+                    Log.e("SyncReportWorker", "Failed to process report ${report.issueId}: ${e.message}")
+                    hasFailure = true
+                    if (e is java.io.IOException || e is retrofit2.HttpException || e.javaClass.name.contains("Timeout") || e.javaClass.name.contains("Connect")) {
+                        hasRecoverableFailure = true
+                    }
                 }
             }
         }
 
-        return if (anyFailure) Result.retry() else Result.success()
+        return when {
+            hasRecoverableFailure -> {
+                Log.w("SyncReportWorker", "Recoverable failure detected, requesting retry from WorkManager.")
+                Result.retry()
+            }
+            hasFailure -> {
+                Log.e("SyncReportWorker", "Unrecoverable failure detected, marking task as failure.")
+                Result.failure()
+            }
+            else -> {
+                Log.d("SyncReportWorker", "All pending reports processed successfully.")
+                Result.success()
+            }
+        }
     }
 }

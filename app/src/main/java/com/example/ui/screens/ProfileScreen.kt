@@ -33,8 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.data.network.SessionManager
-import com.example.data.network.NetworkModule
-import com.example.data.network.NetworkTestNotificationRequest
 import kotlinx.coroutines.launch
 
 @Composable
@@ -49,6 +47,11 @@ fun ProfileScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showNotificationsDialog by remember { mutableStateOf(false) }
     var currentLanguage by remember { mutableStateOf("English") }
+    val coroutineScope = rememberCoroutineScope()
+    var testStatus by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val sessionManager = remember { SessionManager.getInstance(context) }
+    val fcmToken by sessionManager.fcmTokenFlow.collectAsState(initial = "No token generated yet")
 
     Column(
         modifier = modifier
@@ -260,10 +263,7 @@ fun ProfileScreen(
 
     if (showNotificationsDialog) {
         val context = LocalContext.current
-        val sessionManager = SessionManager.getInstance(context)
-        val fcmToken = sessionManager.fcmToken ?: "No token generated yet"
-        val coroutineScope = rememberCoroutineScope()
-        var testStatus by remember { mutableStateOf<String?>(null) }
+        val currentFcmToken = fcmToken ?: "No token generated yet"
 
         AlertDialog(
             onDismissRequest = { showNotificationsDialog = false },
@@ -291,7 +291,7 @@ fun ProfileScreen(
                         ) {
                             Text("Active Registration Token:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             Text(
-                                fcmToken,
+                                currentFcmToken,
                                 fontSize = 11.sp,
                                 maxLines = 3,
                                 color = Color.DarkGray
@@ -299,7 +299,7 @@ fun ProfileScreen(
                             Button(
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("FCM Token", fcmToken)
+                                    val clip = android.content.ClipData.newPlainText("FCM Token", currentFcmToken)
                                     clipboard.setPrimaryClip(clip)
                                     testStatus = "Token copied to clipboard!"
                                 },
@@ -312,7 +312,7 @@ fun ProfileScreen(
                         }
                     }
 
-                    // Test local and remote actions
+                    // Test local action
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -338,7 +338,7 @@ fun ProfileScreen(
                                         .setSound(defaultSoundUri)
                                         .setContentIntent(pendingIntent)
                                         .setPriority(NotificationCompat.PRIORITY_HIGH)
-
+ 
                                     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                         val channel = NotificationChannel(
@@ -354,40 +354,11 @@ fun ProfileScreen(
                                     testStatus = "Local test failed: ${e.message}"
                                 }
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                         ) {
-                            Text("Trigger Local", fontSize = 12.sp, color = Color.White)
-                        }
-
-                        // Action 2: Trigger Backend FCM
-                        Button(
-                            onClick = {
-                                if (fcmToken.contains("No token")) {
-                                    testStatus = "Cannot trigger: no FCM Token"
-                                    return@Button
-                                }
-                                testStatus = "Sending request to FastAPI server..."
-                                coroutineScope.launch {
-                                    try {
-                                        val req = NetworkTestNotificationRequest(
-                                            fcmToken = fcmToken,
-                                            title = "JanMitra Server Push",
-                                            message = "Real hardware push notification test from FastAPI!"
-                                        )
-                                        val response = NetworkModule.backendApiService.sendTestNotification(req)
-                                        testStatus = "Server response: ${response["status"] ?: "OK"}"
-                                    } catch (e: Exception) {
-                                        testStatus = "Server dispatch failed: ${e.message}"
-                                    }
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
-                        ) {
-                            Text("Server Push", fontSize = 12.sp, color = Color.White)
+                            Text("Trigger Local Notification Test", fontSize = 12.sp, color = Color.White)
                         }
                     }
 

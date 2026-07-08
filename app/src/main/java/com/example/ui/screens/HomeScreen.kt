@@ -1,7 +1,15 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,18 +19,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.entity.CitizenReport
+import com.example.ui.components.PriorityBadge
 import com.example.ui.theme.*
 import com.example.viewmodel.JanMitraViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,206 +54,408 @@ fun HomeScreen(
 ) {
     val reports by viewModel.allReports.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     val drafts = reports.filter { it.status == "Draft" }
     val submittedReports = reports.filter { it.status != "Draft" }
 
+    // State for interactive voice overlay
+    var showVoiceOverlay by remember { mutableStateOf(false) }
+
+    // Native language options
+    val languages = listOf(
+        "हिन्दी" to "Hindi",
+        "తెలుగు" to "Telugu",
+        "தமிழ்" to "Tamil",
+        "ಕನ್ನಡ" to "Kannada",
+        "മലയാളം" to "Malayalam",
+        "বাংলা" to "Bengali",
+        "मराठी" to "Marathi",
+        "ગુજરાતી" to "Gujarati",
+        "ਪੰਜਾਬੀ" to "Punjabi",
+        "English" to "English"
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF8FAFC)) // Clean Slate-50 background
+            .background(Color(0xFFF8FAFC)) // Premium Slate background
     ) {
+        // --- 1. Custom Responsive Header & Language Selector ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 18.dp)
+            ) {
+                // Branded row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Campaign,
+                                contentDescription = null,
+                                tint = Color(0xFF1D4ED8),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = "JanMitra AI",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF0F172A),
+                                letterSpacing = (-0.5).sp
+                            )
+                        }
+                        Text(
+                            text = "Direct Citizen-to-Government Link",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+
+                    // Network status / online pill
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFECFDF5))
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981))
+                            )
+                            Text(
+                                text = "District Online",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF047857)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Native Language Quick Selection row
+                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    Text(
+                        text = "Preferred Language / भाषा / భాష",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF64748B),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(languages) { (nativeName, engName) ->
+                            val isSelected = viewModel.userLanguage == engName
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) Color(0xFF1E40AF) else Color(0xFFF1F5F9))
+                                    .clickable { viewModel.updateUserLanguage(engName) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = nativeName,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.White else Color(0xFF334155)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Main Content Column (Scrollable) ---
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // 1. Voice-First Reporting Card (Mockup Style)
+            
+            // --- 2. Voice-First Pulse Microphone Button (Central Action) ---
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToReport(true) },
-                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                border = BorderStroke(1.dp, DividerGray),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    // Golden Circle with Yellow/Gold Mic
+                    Text(
+                        text = "Voice-First Grievance Reporting",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF1E293B),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Report any local issue instantly by speaking in your language",
+                        fontSize = 12.sp,
+                        color = Color(0xFF64748B),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                    )
+
+                    // Pulse Circles Microphone
+                    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                    val pulseScale by infiniteTransition.animateFloat(
+                        initialValue = 1.0f,
+                        targetValue = 1.35f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1500, easing = LinearOutSlowInEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "scale"
+                    )
+                    val pulseAlpha by infiniteTransition.animateFloat(
+                        initialValue = 0.4f,
+                        targetValue = 0.0f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1500, easing = LinearOutSlowInEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "alpha"
+                    )
+
                     Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFFF7ED)) // Very light amber
-                            .border(1.5.dp, Color(0xFFFBBF24), CircleShape),
-                        contentAlignment = Alignment.Center
+                            .size(130.dp)
+                            .clickable { showVoiceOverlay = true }
                     ) {
+                        // Bouncing ring 1
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .fillMaxSize()
+                                .scale(pulseScale)
                                 .clip(CircleShape)
-                                .background(Color(0xFFF59E0B)), // Amber-500
+                                .background(Color(0xFF3B82F6).copy(alpha = pulseAlpha))
+                        )
+                        // Bouncing ring 2
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .scale(pulseScale * 0.8f)
+                                .clip(CircleShape)
+                                .background(Color(0xFF3B82F6).copy(alpha = pulseAlpha * 1.2f))
+                        )
+                        
+                        // Solid Center Button
+                        Box(
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color(0xFF2563EB), Color(0xFF1D4ED8))
+                                    )
+                                )
+                                .border(4.dp, Color.White, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Mic,
-                                contentDescription = "Voice Reporting",
+                                contentDescription = "Tap to Record Voice Report",
                                 tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(36.dp)
                             )
                         }
                     }
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Voice-First Reporting",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1E293B)
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = "Tap the mic and speak about your issue in any local language",
-                            fontSize = 12.sp,
-                            color = Color(0xFF64748B),
-                            lineHeight = 16.sp
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    Icon(
-                        imageVector = Icons.Rounded.ChevronRight,
-                        contentDescription = "Navigate",
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(24.dp)
+                    Text(
+                        text = "TAP TO REPORT WITH VOICE",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF2563EB),
+                        letterSpacing = 1.sp
                     )
                 }
             }
 
-            // 2. What would you like to report? Section
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "What would you like to report?",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0F172A)
-                    )
-                    Text(
-                        text = "View all",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1D4ED8),
-                        modifier = Modifier.clickable { onNavigateToMap() }
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CategoryCircleItem(
-                        title = "Water Issue",
-                        icon = Icons.Rounded.WaterDrop,
-                        color = Color(0xFF2563EB), // Blue
-                        onClick = {
-                            viewModel.reportCategory = "Water"
-                            onNavigateToReport(false)
-                        }
-                    )
-                    CategoryCircleItem(
-                        title = "Road / Drainage",
-                        icon = Icons.Rounded.AddRoad,
-                        color = Color(0xFF16A34A), // Green
-                        onClick = {
-                            viewModel.reportCategory = "Road"
-                            onNavigateToReport(false)
-                        }
-                    )
-                    CategoryCircleItem(
-                        title = "Education",
-                        icon = Icons.Rounded.School,
-                        color = Color(0xFFEA580C), // Orange
-                        onClick = {
-                            viewModel.reportCategory = "School"
-                            onNavigateToReport(false)
-                        }
-                    )
-                    CategoryCircleItem(
-                        title = "More",
-                        icon = Icons.Rounded.MoreHoriz,
-                        color = Color(0xFF7C3AED), // Purple
-                        onClick = {
-                            viewModel.reportCategory = "Other"
-                            onNavigateToReport(false)
-                        }
-                    )
-                }
-            }
-
-            // Saved Drafts Section
+            // --- 3. Offline Draft Recovery Panel ---
             if (drafts.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Saved Drafts (${drafts.size})",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0F172A)
-                    )
-                    
-                    drafts.forEach { draft ->
+                val draft = drafts.first()
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)), // Warm Amber tint
+                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.EditNote,
+                            contentDescription = "Draft Icon",
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Unfinished Grievance Draft Found",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF92400E)
+                            )
+                            Text(
+                                text = draft.description.ifEmpty { "Grievance details in progress..." },
+                                fontSize = 12.sp,
+                                color = Color(0xFFB45309),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = { viewModel.loadDraft(draft) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text("Resume", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            IconButton(
+                                onClick = { viewModel.deleteReport(draft.id) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Delete,
+                                    contentDescription = "Discard Draft",
+                                    tint = Color(0xFFDC2626)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- 4. Icon-First Categories Grid (Large Touch Targets) ---
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Grievance Categories",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF0F172A)
+                )
+
+                val categoriesList = listOf(
+                    CategoryInfo("Water Supply", Icons.Rounded.WaterDrop, PrimaryBlue, "Deficit or poor quality water"),
+                    CategoryInfo("Roads & Transit", Icons.Rounded.AddRoad, SecondaryTeal, "Potholes, broken roads, blocks"),
+                    CategoryInfo("School Quality", Icons.Rounded.School, SecondaryTeal, "School infra upgrades & facilities"),
+                    CategoryInfo("Hospital Staff", Icons.Rounded.LocalHospital, DangerRed, "Medicines, staff, equipment"),
+                    CategoryInfo("Power Lines", Icons.Rounded.ElectricBolt, AccentAmber, "Outages or dangling wires"),
+                    CategoryInfo("Street Lights", Icons.Rounded.Lightbulb, SecondaryTeal, "Non-functional neighborhood lights"),
+                    CategoryInfo("Women Safety", Icons.Rounded.Security, PrimaryBlue, "Safe corridors, patrols, lights"),
+                    CategoryInfo("Agriculture", Icons.Rounded.Agriculture, SuccessGreen, "Irrigation, canal, seed needs"),
+                    CategoryInfo("Other Request", Icons.Rounded.Campaign, SecondaryText, "Any other district support needs")
+                )
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp) // Large explicit height to avoid infinite scroll conflicts
+                ) {
+                    items(categoriesList) { cat ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { viewModel.loadDraft(draft) },
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)), // Warm Amber tint
-                            border = BorderStroke(1.dp, Color(0xFFFDE68A))
+                                .height(94.dp)
+                                .clickable {
+                                    viewModel.resetForm()
+                                    viewModel.reportCategory = cat.name.split(" ")[0]
+                                    onNavigateToReport(false)
+                                },
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, DividerGray),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.EditNote,
-                                    contentDescription = "Draft",
-                                    tint = Color(0xFFD97706),
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(cat.color.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = cat.icon,
+                                        contentDescription = cat.name,
+                                        tint = cat.color,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.Center) {
                                     Text(
-                                        text = draft.description.ifEmpty { "[No description yet]" },
-                                        fontSize = 14.sp,
+                                        text = cat.name,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF92400E),
+                                        color = Color(0xFF1E293B),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "Category: ${draft.category} • Location: ${draft.locationName}",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFFB45309)
+                                        text = cat.desc,
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF64748B),
+                                        lineHeight = 12.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
-                                }
-                                Button(
-                                    onClick = { viewModel.loadDraft(draft) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text("Resume", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -242,14 +463,14 @@ fun HomeScreen(
                 }
             }
 
-            // 3. AI Decision Insight Card with Native glowing Heatmap
+            // --- 5. AI Insight Banner ---
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onNavigateToMap() },
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)), // Deep Slate Navy
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)), // Deep Slate
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Row(
                     modifier = Modifier.padding(20.dp),
@@ -257,82 +478,68 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1.3f)) {
-                        Text(
-                            text = "AI Decision Insight",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Water supply issues in your area are high. 112 similar reports found.",
-                            fontSize = 13.sp,
-                            color = Color(0xFF94A3B8),
-                            lineHeight = 18.sp
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Button(
-                            onClick = { onNavigateToMap() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
-                            border = BorderStroke(1.dp, Color(0xFF334155)),
-                            shape = RoundedCornerShape(18.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                            modifier = Modifier.height(34.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text("View Details", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            Icon(
+                                imageVector = Icons.Rounded.Psychology,
+                                contentDescription = null,
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "AI Constituency Insights",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
                         }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "A total of ${submittedReports.size} active development needs have been logged this week across 4 villages. Dynamic heatmap overlays are available.",
+                            fontSize = 12.sp,
+                            color = Color(0xFF94A3B8),
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Explore Live GIS Map →",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF38BDF8)
+                        )
                     }
 
-                    // Native glowing heatmap graphic
                     Box(
                         modifier = Modifier
                             .weight(0.7f)
-                            .height(90.dp)
+                            .height(84.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF1E293B))
+                            .background(Color(0xFF1E293B)),
+                        contentAlignment = Alignment.Center
                     ) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
-                            // Draw some abstract green network/landmass paths
-                            val pathColor = Color(0xFF0F172A)
-                            drawCircle(color = pathColor, radius = 45f, center = Offset(x = size.width * 0.3f, y = size.height * 0.4f))
-                            drawCircle(color = pathColor, radius = 55f, center = Offset(x = size.width * 0.7f, y = size.height * 0.6f))
-
-                            // Draw glowing heatmap circles with radial gradients
                             drawCircle(
                                 brush = Brush.radialGradient(
-                                    colors = listOf(Color(0x99EF4444), Color(0x33EF4444), Color.Transparent),
-                                    center = Offset(size.width * 0.5f, size.height * 0.4f),
-                                    radius = 70f
+                                    colors = listOf(Color(0x99EF4444), Color.Transparent),
+                                    center = Offset(size.width * 0.5f, size.height * 0.5f),
+                                    radius = 80f
                                 ),
-                                radius = 70f,
-                                center = Offset(size.width * 0.5f, size.height * 0.4f)
+                                radius = 80f,
+                                center = Offset(size.width * 0.5f, size.height * 0.5f)
                             )
-
                             drawCircle(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(Color(0x88F59E0B), Color(0x22F59E0B), Color.Transparent),
-                                    center = Offset(size.width * 0.35f, size.height * 0.6f),
-                                    radius = 50f
-                                ),
-                                radius = 50f,
-                                center = Offset(size.width * 0.35f, size.height * 0.6f)
-                            )
-
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(Color(0x7710B981), Color(0x1110B981), Color.Transparent),
-                                    center = Offset(size.width * 0.7f, size.height * 0.3f),
-                                    radius = 60f
-                                ),
-                                radius = 60f,
-                                center = Offset(size.width * 0.7f, size.height * 0.3f)
+                                color = Color.White.copy(alpha = 0.8f),
+                                radius = 6f,
+                                center = Offset(size.width * 0.5f, size.height * 0.5f)
                             )
                         }
                     }
                 }
             }
 
-            // 4. Recent Reports Section
+            // --- 6. Recent Reports Section ---
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -340,16 +547,16 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Recent Reports",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "Recent Grievance Submissions",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFF0F172A)
                     )
                     Text(
-                        text = "View all",
-                        fontSize = 13.sp,
+                        text = "View Map",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1D4ED8),
+                        color = Color(0xFF2563EB),
                         modifier = Modifier.clickable { onNavigateToMap() }
                     )
                 }
@@ -358,10 +565,28 @@ fun HomeScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
+                            .background(Color.White, RoundedCornerShape(16.dp))
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
+                            .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Color(0xFF2563EB), modifier = Modifier.size(24.dp))
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.FolderOpen,
+                                contentDescription = null,
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Text(
+                                text = "No reports submitted yet",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF64748B)
+                            )
+                        }
                     }
                 } else {
                     submittedReports.take(4).forEach { report ->
@@ -374,7 +599,31 @@ fun HomeScreen(
             }
         }
     }
+
+    // --- Interactive Voice Overlay Dialog ---
+    if (showVoiceOverlay) {
+        VoiceCaptureSimulationOverlay(
+            userLanguage = viewModel.userLanguage,
+            onClose = { showVoiceOverlay = false },
+            onSaveAndProceed = { text ->
+                viewModel.resetForm()
+                viewModel.reportDescription = text
+                viewModel.isVoiceRecorded = true
+                viewModel.attachedVideoUri = "mock_voice_recording.aac" // Save mock voice path
+                viewModel.activeFormStep = 2 // Move directly to Location / Details!
+                showVoiceOverlay = false
+                onNavigateToReport(true)
+            }
+        )
+    }
 }
+
+data class CategoryInfo(
+    val name: String,
+    val icon: ImageVector,
+    val color: Color,
+    val desc: String
+)
 
 @Composable
 fun CategoryCircleItem(
@@ -407,7 +656,7 @@ fun CategoryCircleItem(
         }
         Text(
             text = title,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF334155),
             maxLines = 1,
@@ -426,17 +675,16 @@ fun PolishedIssueCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+        border = BorderStroke(1.dp, DividerGray),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Category Icon with Circle Backdrop
             val icon = when (report.category) {
                 "Water" -> Icons.Rounded.WaterDrop
                 "Road" -> Icons.Rounded.AddRoad
@@ -473,11 +721,10 @@ fun PolishedIssueCard(
                 )
             }
 
-            // Report info text
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = report.description,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF1E293B),
                     maxLines = 1,
@@ -490,26 +737,265 @@ fun PolishedIssueCard(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "Reported on 6 Jul 2026 • ID: ${report.issueId}",
+                    text = "Report ID: ${report.issueId} • ${report.status}",
                     fontSize = 11.sp,
                     color = Color(0xFF94A3B8)
                 )
             }
 
-            // Badge on the Right
-            Box(
+            // Priority score badge
+            PriorityBadge(score = report.priorityScore)
+        }
+    }
+}
+
+// --- VOICE RECORDING & WAVEFORM SIMULATION OVERLAY ---
+@Composable
+fun VoiceCaptureSimulationOverlay(
+    userLanguage: String,
+    onClose: () -> Unit,
+    onSaveAndProceed: (String) -> Unit
+) {
+    var recordingDurationSec by remember { mutableStateOf(0) }
+    var isPaused by remember { mutableStateOf(false) }
+    var detectedText by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Mock transcript chunks mapped to the selected language to make it highly immersive!
+    val transcriptList = when (userLanguage) {
+        "Hindi" -> listOf(
+            "सुनिए, हमारे गाँव भोला में...",
+            "मुख्य सड़क पर जो पेयजल की पाइपलाइन है...",
+            "वह पूरी तरह से टूट गई है और पानी बह रहा है...",
+            "सड़क पर बहुत जलभराव हो गया है, बच्चे स्कूल नहीं जा पा रहे हैं।"
+        )
+        "Telugu" -> listOf(
+            "నమస్కారం, మా భోలా గ్రామంలో...",
+            "ప్రధాన రహదారి పక్కన త్రాగునీటి పైప్‌లైన్ పగిలిపోయింది...",
+            "నీరంతా వృధాగా పోయి రోడ్డంతా నిండిపోయింది...",
+            "స్కూల్ పిల్లలు మరియు వాహనదారులు వెళ్లడానికి చాలా ఇబ్బంది పడుతున్నారు."
+        )
+        "Tamil" -> listOf(
+            "வணக்கம், எங்களது போலா கிராமத்தில்...",
+            "முக்கிய சாலையில் உள்ள குடிநீர் குழாய் உடைந்துள்ளது...",
+            "நீர் வீணாக வெளியேறி சாலை முழுவதும் தேங்கியுள்ளது...",
+            "பள்ளிக்குச் செல்லும் குழந்தைகள் இதனால் பெரிதும் பாதிக்கப்படுகின்றனர்."
+        )
+        "Kannada" -> listOf(
+            "ನಮಸ್ಕಾರ, ನಮ್ಮ ಭೋಲಾ ಗ್ರಾಮದಲ್ಲಿ...",
+            "ಮುಖ್ಯ ರಸ್ತೆಯಲ್ಲಿರುವ ಕುಡಿಯುವ ನೀರಿನ ಪೈಪ್ ಒಡೆದು ಹೋಗಿದೆ...",
+            "ನೀರೆಲ್ಲಾ ಪೋಲಾಗಿ ರಸ್ತೆಯ ತುಂಬೆಲ್ಲಾ ಹರಿಯುತ್ತಿದೆ...",
+            "ಶಾಲಾ ಮಕ್ಕಳಿಗೆ ಮತ್ತು ಸಾರ್ವಜನಿಕರಿಗೆ ಓಡಾಡಲು ತುಂಬಾ ತೊಂದರೆಯಾಗಿದೆ."
+        )
+        else -> listOf(
+            "Hello, in our Bhola Village...",
+            "The drinking water pipeline beside the main road is broken...",
+            "Water is leaking heavily and flooding the streets...",
+            "It has created a major hazard. Kids can't walk to school."
+        )
+    }
+
+    LaunchedEffect(isPaused) {
+        while (!isPaused) {
+            delay(1000)
+            recordingDurationSec++
+            
+            // Periodically dump a transcript line to simulate continuous Speech-to-Text!
+            val chunkIndex = (recordingDurationSec / 2).coerceAtMost(transcriptList.size - 1)
+            detectedText = transcriptList.take(chunkIndex + 1).joinToString(" ")
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0F172A).copy(alpha = 0.95f)), // Full screen immersive dark
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+            shape = RoundedCornerShape(0.dp)
+        ) {
+            Column(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFCCFBF1)) // Light Teal
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "AI Analyzed",
-                    color = Color(0xFF0F766E), // Dark Teal
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "JanMitra Voice Assistant",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Color.White)
+                    }
+                }
+
+                // Core Animation & Waveform
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (isPaused) "Recording Paused" else "Listening in $userLanguage...",
+                        color = if (isPaused) Color(0xFFFBBF24) else Color(0xFF60A5FA),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    // Waveform lines animation drawn dynamically
+                    val timeAnim = rememberInfiniteTransition(label = "waveform")
+                    val phaseOffset by timeAnim.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 2f * Math.PI.toFloat(),
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1200, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "phase"
+                    )
+
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(110.dp)
+                    ) {
+                        val width = size.width
+                        val height = size.height
+                        val midY = height / 2f
+                        
+                        // Draw 3 dynamic sine waves overlapping to look highly realistic and beautiful
+                        val waves = listOf(
+                            WaveParams(amplitude = 36f, frequency = 0.025f, color = Color(0xFF3B82F6), strokeWidth = 3f, alpha = 0.9f),
+                            WaveParams(amplitude = 22f, frequency = 0.04f, color = Color(0xFF10B981), strokeWidth = 2f, alpha = 0.7f),
+                            WaveParams(amplitude = 15f, frequency = 0.055f, color = Color(0xFFEC4899), strokeWidth = 1.5f, alpha = 0.5f)
+                        )
+
+                        waves.forEach { wave ->
+                            val path = androidx.compose.ui.graphics.Path()
+                            path.moveTo(0f, midY)
+                            for (x in 0..width.toInt() step 5) {
+                                // If paused, damp amplitude to flat line
+                                val amp = if (isPaused) 2f else wave.amplitude
+                                val y = midY + amp * sin(x * wave.frequency + phaseOffset)
+                                path.lineTo(x.toFloat(), y)
+                            }
+                            drawPath(
+                                path = path,
+                                color = wave.color.copy(alpha = wave.alpha),
+                                style = Stroke(width = wave.strokeWidth)
+                            )
+                        }
+                    }
+
+                    // Digital timer
+                    val minutes = recordingDurationSec / 60
+                    val seconds = recordingDurationSec % 60
+                    Text(
+                        text = String.format("%02d:%02d", minutes, seconds),
+                        color = Color.White,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                // Live continuous Speech-to-Text Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Rounded.Spellcheck, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "LIVE SPEECH-TO-TEXT TRANSCRIPT",
+                                color = Color(0xFF10B981),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        Text(
+                            text = detectedText.ifEmpty { "Start speaking. The AI will convert your voice in real-time..." },
+                            color = if (detectedText.isEmpty()) Color(0xFF64748B) else Color.White,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Audio Recorder Controls (Record, Pause, Resume, Stop, Playback)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Pause/Resume Button
+                    IconButton(
+                        onClick = { isPaused = !isPaused },
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF334155))
+                    ) {
+                        Icon(
+                            imageVector = if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                            contentDescription = if (isPaused) "Resume" else "Pause",
+                            tint = Color.White
+                        )
+                    }
+
+                    // Submit & Proceed Check Button
+                    Button(
+                        onClick = {
+                            val finalSpeechText = if (detectedText.isEmpty()) "Water pipes leaking on Bhola Village central street." else detectedText
+                            onSaveAndProceed(finalSpeechText)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Rounded.CheckCircle, contentDescription = null)
+                            Text("Use Voice Transcript", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+data class WaveParams(
+    val amplitude: Float,
+    val frequency: Float,
+    val color: Color,
+    val strokeWidth: Float,
+    val alpha: Float
+)

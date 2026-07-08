@@ -37,7 +37,6 @@ interface AiRepository {
 
 class AiRepositoryImpl(
     private val aiDataSource: AiDataSource,
-    private val backendApiService: BackendApiService,
     private val moshi: Moshi
 ) : AiRepository {
 
@@ -48,15 +47,7 @@ class AiRepositoryImpl(
         isVoiceRecorded: Boolean,
         isPhotoAttached: Boolean
     ): ReportAnalysisResult {
-        // 1. Try FastAPI endpoint first
-        try {
-            // Since we submit reports dynamically, let's try direct AI analysis via API if needed
-            // Fall back to direct Gemini generation if backend is offline.
-        } catch (e: Exception) {
-            // Keep going to local fallback
-        }
-
-        // 2. Local Fallback Direct Gemini implementation
+        // Direct local/remote AI analysis via Gemini REST API
         val prompt = """
             You are the backend AI of JanMitra. The citizen is reporting an issue in ${villageName}:
             - Category: $category
@@ -84,11 +75,19 @@ class AiRepositoryImpl(
         val rawResponse = try {
             aiDataSource.generateContent(prompt, systemInstruction)
         } catch (e: Exception) {
-            // Absolute local offline fallback without network at all
+            // Absolute local offline fallback without network at all (heuristic analysis)
+            val descLower = description.lowercase()
+            val detectedUrgency = if (descLower.contains("critical") || 
+                                     descLower.contains("emergency") ||
+                                     descLower.contains("accident") ||
+                                     descLower.contains("broken") ||
+                                     descLower.contains("overflowing") ||
+                                     descLower.contains("dying") ||
+                                     descLower.contains("unsafe")) "Critical" else "Medium"
             return ReportAnalysisResult(
-                language = "English (Offline)",
-                urgency = "Medium",
-                summary = "Requirement of $category in $villageName. Summary processed locally on-device.",
+                language = "English (Offline Fallback)",
+                urgency = detectedUrgency,
+                summary = "Local Heuristic: Requirement of $category in $villageName. Description: $description. Summary processed locally on-device.",
                 duplicateAlert = null
             )
         }
@@ -133,17 +132,7 @@ class AiRepositoryImpl(
     }
 
     override suspend fun sendChatMessage(text: String, contextStr: String): String {
-        // 1. Try FastAPI Backend RAG Chat endpoint
-        try {
-            val response = backendApiService.sendChatMessage(NetworkChatQuery(text))
-            if (response.status == "success") {
-                return response.response
-            }
-        } catch (e: Exception) {
-            // Fallback to local Gemini API below
-        }
-
-        // 2. Fallback direct Gemini model
+        // Direct Gemini model generation
         val systemInstruction = """
             You are JanMitra AI, a state-of-the-art Decision Intelligence system for Members of Parliament (MPs) and development planners.
             You have access to live datasets of citizen reported needs, current infrastructure statuses, and village development indexes.
@@ -163,24 +152,12 @@ class AiRepositoryImpl(
         return try {
             aiDataSource.generateContent(prompt, systemInstruction)
         } catch (e: Exception) {
-            "JanMitra Intelligence Fallback: Backend service is currently unlinked. Please check your network connection or verify that the Docker-compose stack is running."
+            "JanMitra Intelligence Fallback: Offline mode active. Cannot compile deep analysis. Please check your internet connection or try again."
         }
     }
 
     override suspend fun compareProjects(projA: CitizenReport, projB: CitizenReport): String {
-        // 1. Try FastAPI Backend project comparison endpoint
-        try {
-            val response = backendApiService.compareProjects(
-                NetworkCompareRequest(projA.issueId, projB.issueId)
-            )
-            if (response.status == "success") {
-                return response.comparison
-            }
-        } catch (e: Exception) {
-            // Fallback to local Gemini API below
-        }
-
-        // 2. Fallback direct Gemini model comparison
+        // Direct Gemini model comparison
         val prompt = """
             Compare these two constituency projects side-by-side for an MP's decision making:
             Project A: ID ${projA.issueId}, ${projA.category} in ${projA.locationName}, priority score ${projA.priorityScore}. Description: "${projA.description}". Explanation: ${projA.explanationText}
@@ -195,8 +172,7 @@ class AiRepositoryImpl(
         return try {
             aiDataSource.generateContent(prompt, null)
         } catch (e: Exception) {
-            "Comparison Fallback: Unable to compile comparison. Project A Priority Score: ${projA.priorityScore}, Project B Priority Score: ${projB.priorityScore}. Please link the central backend to generate multi-dimensional vector comparisons."
+            "Comparison Fallback (Offline): Project A Priority Score is ${projA.priorityScore} and Project B Priority Score is ${projB.priorityScore}. Project A should be addressed first as recommended by local priority algorithms."
         }
     }
 }
-

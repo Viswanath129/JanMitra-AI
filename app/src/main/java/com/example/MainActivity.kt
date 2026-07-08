@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.data.AppDatabase
-import com.example.data.network.NetworkModule
 import com.example.data.repository.JanMitraRepository
 import com.example.ui.components.JanMitraHeader
 import com.example.ui.screens.*
@@ -41,9 +40,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.firebase.messaging.FirebaseMessaging
 import com.example.data.network.SessionManager
-import com.example.data.network.NetworkFcmTokenRegister
+import com.example.data.network.NetworkModule
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 
@@ -55,7 +53,6 @@ class MainActivity : ComponentActivity() {
     ) { isGranted: Boolean ->
         if (isGranted) {
             Log.d("MainActivity", "Notification permission granted.")
-            fetchAndRegisterFcmToken()
         } else {
             Log.w("MainActivity", "Notification permission denied.")
         }
@@ -78,49 +75,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
-    }
-
-    private fun fetchAndRegisterFcmToken() {
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                Log.w("MainActivity", "Fetching FCM registration token failed", task.exception)
-                return@addOnCompleteListener
-            }
-            val token = task.result ?: return@addOnCompleteListener
-            Log.d("MainActivity", "FCM Token fetched: $token")
-            val sessionManager = SessionManager.getInstance(applicationContext)
-            sessionManager.fcmToken = token
-
-            // Subscribe to generic alerts topic
-            FirebaseMessaging.getInstance().subscribeToTopic("all_alerts")
-                .addOnCompleteListener { subTask ->
-                    if (subTask.isSuccessful) {
-                        Log.d("MainActivity", "Subscribed to 'all_alerts' topic")
-                    } else {
-                        Log.e("MainActivity", "Failed to subscribe to 'all_alerts' topic")
-                    }
-                }
-
-            // Retry token registration with backend using exponential backoff
-            registerFcmTokenWithRetry(token, sessionManager.userEmail, 1)
-        }
-    }
-
-    private fun registerFcmTokenWithRetry(token: String, email: String?, attempt: Int) {
-        lifecycleScope.launch {
-            try {
-                val api = NetworkModule.backendApiService
-                val response = api.registerFcmToken(NetworkFcmTokenRegister(fcmToken = token, email = email))
-                Log.d("MainActivity", "FCM Token registered successfully on attempt $attempt: $response")
-            } catch (e: java.lang.Exception) {
-                Log.e("MainActivity", "Attempt $attempt to register FCM Token failed: ${e.message}")
-                if (attempt < 4) {
-                    val delayMs = 2000L * attempt * attempt
-                    kotlinx.coroutines.delay(delayMs)
-                    registerFcmTokenWithRetry(token, email, attempt + 1)
-                }
-            }
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -167,15 +121,17 @@ class MainActivity : ComponentActivity() {
         // Initialize Room Database & Repository
         val database = AppDatabase.getDatabase(applicationContext)
         val repository = JanMitraRepository(
+            database,
             database.citizenReportDao(),
             database.infrastructureAssetDao(),
             database.villageStatisticsDao(),
             database.aiChatMessageDao()
         )
 
-        // Pre-seed the database if it is empty to ensure real datasets are loaded
+        // Pre-seed the database and clean up orphaned media if any exist
         lifecycleScope.launch {
             repository.preseedDatabaseIfEmpty()
+            repository.cleanupOrphanedMedia(applicationContext)
         }
 
         // Initialize ViewModel using the Custom Factory
@@ -193,11 +149,7 @@ class MainActivity : ComponentActivity() {
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                fetchAndRegisterFcmToken()
             }
-        } else {
-            fetchAndRegisterFcmToken()
         }
 
         setContent {
@@ -211,16 +163,6 @@ class MainActivity : ComponentActivity() {
                         trackSearchId = issueId
                         activeScreen = "Track"
                         viewModel.currentTrackIdFromDeepLink = null
-                    }
-                }
-
-                LaunchedEffect(viewModel.isUserLoggedIn, viewModel.currentUserEmail) {
-                    if (viewModel.isUserLoggedIn && viewModel.currentUserEmail.isNotEmpty()) {
-                        val sessionManager = SessionManager.getInstance(applicationContext)
-                        sessionManager.fcmToken?.let { token ->
-                            Log.d("MainActivity", "User logged in. Re-registering token for ${viewModel.currentUserEmail}")
-                            registerFcmTokenWithRetry(token, viewModel.currentUserEmail, 1)
-                        }
                     }
                 }
 
@@ -425,21 +367,29 @@ fun BottomNavItem(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() }
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (isSelected) PrimaryBlue else SecondaryText,
-            modifier = Modifier.size(24.dp)
-        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (isSelected) PrimaryBlue.copy(alpha = 0.12f) else Color.Transparent)
+                .padding(horizontal = 18.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) PrimaryBlue else SecondaryText,
+                modifier = Modifier.size(22.dp)
+            )
+        }
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             color = if (isSelected) PrimaryBlue else SecondaryText
         )

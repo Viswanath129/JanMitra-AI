@@ -23,7 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.entity.CitizenReport
+import com.example.data.ReportExporter
 import com.example.ui.components.PriorityBadge
 import com.example.ui.components.StatusBadge
 import com.example.ui.theme.*
@@ -42,14 +44,16 @@ fun TrackScreen(
     val reports by viewModel.allReports.collectAsStateWithLifecycle()
     var searchIdInput by remember { mutableStateOf(initialSearchId) }
     var selectedReportForDetails by remember { mutableStateOf<CitizenReport?>(null) }
+    var initialSearchProcessed by remember(initialSearchId) { mutableStateOf(false) }
 
     // Sync initial search if passed
     LaunchedEffect(initialSearchId, reports) {
-        if (initialSearchId.isNotEmpty() && reports.isNotEmpty()) {
+        if (!initialSearchProcessed && initialSearchId.isNotEmpty() && reports.isNotEmpty()) {
             searchIdInput = initialSearchId
             val found = reports.firstOrNull { it.issueId.lowercase() == initialSearchId.lowercase() }
             if (found != null) {
                 selectedReportForDetails = found
+                initialSearchProcessed = true
             }
         }
     }
@@ -229,23 +233,65 @@ fun TrackScreen(
                     }
                 }
 
-                // "View on Map" Full Width Button
-                Button(
-                    onClick = { onNavigateToMap() },
+                // Dual Actions Block
+                val context = LocalContext.current
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                        .height(50.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
-                    shape = RoundedCornerShape(14.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "View on Map",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Button(
+                        onClick = { onNavigateToMap() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                        shape = RoundedCornerShape(14.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Map,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "View on Map",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Button(
+                        onClick = { ReportExporter.shareReportPdf(context, report) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Emerald green
+                        shape = RoundedCornerShape(14.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Share,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Export & Share",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         } else {

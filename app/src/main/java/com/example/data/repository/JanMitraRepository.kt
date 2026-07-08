@@ -1,30 +1,36 @@
 package com.example.data.repository
 
 import android.util.Log
+import com.example.data.AppDatabase
 import com.example.data.dao.*
 import com.example.data.entity.*
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class JanMitraRepository(
+    private val database: AppDatabase,
     private val citizenReportDao: CitizenReportDao,
     private val infrastructureAssetDao: InfrastructureAssetDao,
     private val villageStatisticsDao: VillageStatisticsDao,
     private val aiChatMessageDao: AiChatMessageDao
 ) {
-    val allReports: Flow<List<CitizenReport>> = citizenReportDao.getAllReports()
+    val allReports: Flow<List<CitizenReport>> = citizenReportDao.getAllReports().map { list ->
+        list.map { decryptReport(it) }
+    }
     val allAssets: Flow<List<InfrastructureAsset>> = infrastructureAssetDao.getAllAssets()
     val allVillageStats: Flow<List<VillageStatistics>> = villageStatisticsDao.getAllVillageStats()
     val allChatMessages: Flow<List<AiChatMessage>> = aiChatMessageDao.getAllMessages()
 
     suspend fun insertReport(report: CitizenReport) = withContext(Dispatchers.IO) {
-        citizenReportDao.insertReport(report)
+        citizenReportDao.insertReport(encryptReport(report))
     }
 
     suspend fun updateReport(report: CitizenReport) = withContext(Dispatchers.IO) {
-        citizenReportDao.updateReport(report)
+        citizenReportDao.updateReport(encryptReport(report))
     }
 
     suspend fun deleteReport(id: Int) = withContext(Dispatchers.IO) {
@@ -39,12 +45,40 @@ class JanMitraRepository(
         aiChatMessageDao.clearAllMessages()
     }
 
-    suspend fun preseedDatabaseIfEmpty() = withContext(Dispatchers.IO) {
-        val existingStats = villageStatisticsDao.getAllVillageStats().firstOrNull()
-        if (existingStats.isNullOrEmpty()) {
-            Log.d("JanMitraRepository", "Pre-seeding database with mock datasets...")
+    suspend fun cleanupOrphanedMedia(context: android.content.Context) = withContext(Dispatchers.IO) {
+        try {
+            val reportsList = citizenReportDao.getAllReports().firstOrNull() ?: return@withContext
+            val referencedPaths = HashSet<String>()
+            for (report in reportsList) {
+                val decrypted = decryptReport(report)
+                decrypted.imageUri?.let { referencedPaths.add(it) }
+                decrypted.voiceFilePath?.let { referencedPaths.add(it) }
+            }
+            
+            val filesDir = context.filesDir
+            val files = filesDir.listFiles() ?: return@withContext
+            for (file in files) {
+                val absPath = file.absolutePath
+                val name = file.name
+                if (name.startsWith("attached_img") || name.startsWith("attached_vid")) {
+                    if (!referencedPaths.contains(absPath)) {
+                        val deleted = file.delete()
+                        Log.d("JanMitraRepository", "Deleted orphaned media file: $name (success=$deleted)")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("JanMitraRepository", "Error cleaning up orphaned media: ${e.message}")
+        }
+    }
 
-            // 1. Seed Village Statistics
+    suspend fun preseedDatabaseIfEmpty() = withContext(Dispatchers.IO) {
+        database.withTransaction {
+            val existingStats = villageStatisticsDao.getAllVillageStats().firstOrNull()
+            if (existingStats.isNullOrEmpty()) {
+                Log.d("JanMitraRepository", "Pre-seeding database with mock datasets...")
+
+                // 1. Seed Village Statistics
             val stats = listOf(
                 VillageStatistics(
                     villageName = "Bhola Village",
@@ -202,7 +236,7 @@ class JanMitraRepository(
             )
 
             for (report in reports) {
-                citizenReportDao.insertReport(report)
+                citizenReportDao.insertReport(encryptReport(report))
             }
 
             // 4. Seed initial AI assistant welcome messages
@@ -214,6 +248,7 @@ class JanMitraRepository(
             )
         }
     }
+}
 
     fun calculatePriorityScore(
         category: String,
@@ -335,5 +370,29 @@ class JanMitraRepository(
             historicalNeglectScore = historicalNeglectScore,
             explanationText = explanation
         )
+    }
+
+    companion object {
+        fun encryptReport(report: CitizenReport): CitizenReport {
+            return report.copy(
+                description = com.example.data.network.CryptoHelper.encrypt(report.description),
+                voiceFilePath = report.voiceFilePath?.let { com.example.data.network.CryptoHelper.encrypt(it) },
+                imageUri = report.imageUri?.let { com.example.data.network.CryptoHelper.encrypt(it) },
+                locationName = com.example.data.network.CryptoHelper.encrypt(report.locationName),
+                aiSummary = com.example.data.network.CryptoHelper.encrypt(report.aiSummary),
+                explanationText = com.example.data.network.CryptoHelper.encrypt(report.explanationText)
+            )
+        }
+
+        fun decryptReport(report: CitizenReport): CitizenReport {
+            return report.copy(
+                description = com.example.data.network.CryptoHelper.decrypt(report.description) ?: report.description,
+                voiceFilePath = report.voiceFilePath?.let { com.example.data.network.CryptoHelper.decrypt(it) ?: it },
+                imageUri = report.imageUri?.let { com.example.data.network.CryptoHelper.decrypt(it) ?: it },
+                locationName = com.example.data.network.CryptoHelper.decrypt(report.locationName) ?: report.locationName,
+                aiSummary = com.example.data.network.CryptoHelper.decrypt(report.aiSummary) ?: report.aiSummary,
+                explanationText = com.example.data.network.CryptoHelper.decrypt(report.explanationText) ?: report.explanationText
+            )
+        }
     }
 }

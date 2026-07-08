@@ -36,13 +36,17 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name="com.example.service.JanMitraFcmService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.example.janmitra.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+
     </application>
 
 </manifest>
