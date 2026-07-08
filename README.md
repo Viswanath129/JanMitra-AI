@@ -1,6 +1,6 @@
 # JanMitra AI 🇮🇳
 ### People's Voice. Intelligent Development.
-
+L
 > An offline-first AI-powered Android platform that empowers citizens to report local development issues and enables evidence-based constituency planning.
 
 ![Platform](https://img.shields.io/badge/Platform-Android-green)
@@ -11,7 +11,7 @@
 ![Status](https://img.shields.io/badge/Release-v1.0.0-blue)
 
 ---
-
+Live Demo Link : https://ai.studio/apps/654791f8-4f91-456b-952f-7b8bb99ae915
 # 📌 Overview
 
 JanMitra AI is an **offline-first Android application** designed to bridge the gap between citizens and public representatives.
