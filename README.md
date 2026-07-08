@@ -1,6 +1,6 @@
 # JanMitra AI 🇮🇳
 ### People's Voice. Intelligent Development.
-L
+
 > An offline-first AI-powered Android platform that empowers citizens to report local development issues and enables evidence-based constituency planning.
 
 ![Platform](https://img.shields.io/badge/Platform-Android-green)
