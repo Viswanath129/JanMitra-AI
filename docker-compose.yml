@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: janmitra-postgis-db
+    restart: always
+    environment:
+      POSTGRES_DB: janmitra
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d janmitra"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: janmitra-fastapi-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/janmitra
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JWT_SECRET_KEY=b99be4f16954a7f6cdcf4e69b59695669b6dbfae9d3b1458
+      - FIREBASE_STORAGE_BUCKET=janmitra-ai.appspot.com
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - server_uploads:/app/server/uploads
+
+  nginx:
+    image: nginx:alpine
+    container_name: janmitra-nginx-proxy
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+
+volumes:
+  postgis_data:
+    driver: local
+  server_uploads:
+    driver: local
